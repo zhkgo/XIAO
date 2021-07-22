@@ -25,7 +25,7 @@
     <div id="app">
     <el-row style="margin-top: 20px;margin-bottom: 30px;">
         <el-col :span="16"><div ><img src="./images/BCI_title.jpg" width="800px"/></div></el-col>
-        <el-col :span="6"><div style='color: #409eff; text-align: right; font-size: 50px; font-family: font-family: "Helvetica Neue",Helvetica,"PingFang SC","Hiragino Sans GB","Microsoft YaHei","微软雅黑",Arial,sans-serif;'><i class="el-icon-location-information"></i>视频目标跟踪</div></el-col>
+        <el-col :span="6"><div style='line-height:height; color: #409eff; text-align: right; font-size: 50px; font-family: font-family: "Helvetica Neue",Helvetica,"PingFang SC","Hiragino Sans GB","Microsoft YaHei","微软雅黑",Arial,sans-serif;'><i class="el-icon-location-information"></i>视频目标跟踪</div></el-col>
         <audio id="tishiyin" src="./sounds/tishi.wav" preload="auto"></audio>
     </el-row>
     <el-row>
@@ -35,18 +35,18 @@
             <el-step title="接入眼动仪" icon="el-icon-aim"></el-step>
           </el-steps>
     </el-row>
-    <el-row style="margin-top: 10px;">
+    <el-row style="margin-top: 20px;">
         <el-col :span="1"><div style="width:100%;height:20px;"></div></el-col>
         <el-col :span="19">
-                <el-button id="BCIbtn" @click="dealBCI()" type="primary" round><i class="el-icon-s-custom"></i>接入脑电</el-button>
-                <el-button @click="connectToREID()" type="primary" round><i class="el-icon-cpu"></i>接入计算机视觉</el-button>
-                <el-button @click="connectToEye()" type="primary" round><i class="el-icon-aim"></i>接入眼动仪</el-button>
-                <el-button @click="reviseBaseline()" type="primary" round>修正脑电基线</el-button>
-                <el-button @click="pretrain()" type="primary" round>预训练脑电判别模型</el-button>
+                <el-button id="BCIbtn" @click="dealBCI()" type="danger" size="small" round><i class="el-icon-s-custom"></i>接入脑电</el-button>
+                <el-button @click="connectToREID()" type="primary" size="small"  round><i class="el-icon-cpu"></i>接入计算机视觉</el-button>
+                <el-button @click="connectToEye()" type="warning" size="small"  round><i class="el-icon-aim"></i>接入眼动仪</el-button>
+                <el-button @click="reviseBaseline()" type="success" size="small" round>修正脑电基线</el-button>
+                <el-button @click="pretrain()" type="info" size="small" round>预训练脑电判别模型</el-button>
         </el-col>
     </el-row>
 
-    <el-row><div id="bcicontainer" style="height: 600px"></div></el-row>
+    <el-row><div id="bcicontainer" style="margin-top:20 px; height: 600px"></div></el-row>
     <el-row id="rsvpblock" style="margin-top:20px;margin-left: 50px;">
         <el-col style="text-align:center" :span="3">
             <h2>请注意以下目标</h2>

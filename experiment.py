@@ -90,7 +90,7 @@ class Experiment:
             if self.skipinterval==0:
                 cur+=self.interval
         self.device=device
-        assert device<2,"设备编号应当小于2"
+        assert device<3,"设备编号应当小于3"
         self.device_channels=self.CHANNELS[self.device]
     #暂未重写 先留着 还没啥用处
     def restart_tcp(self):
