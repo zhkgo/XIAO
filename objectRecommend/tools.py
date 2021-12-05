@@ -89,4 +89,4 @@ def getMoreLink(linksIn):
     l_fids = g_fids[flt]
     distmat = metrics.distance.cosine_distance(features, l_features)
     vid,fid=recommend(distmat,l_camids,l_fids)
-    return toDeepLink(vid,fid)
+    return [toDeepLink(vid,fid)]

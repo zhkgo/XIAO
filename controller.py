@@ -62,7 +62,7 @@ def background_task():
             if type(d) is list:
                 if reID is not None:
                     d=reID.getMoreVideo(d)
-                socketio.emit('newdeeplinks',success({"deeplinks":[item.toJson for item in d]}))
+                socketio.emit('newdeeplinks',success({"deeplinks":[item.toJson() for item in d]}))
                 
 @socketio.on('connect',namespace='/pushDeeplink')
 def recevDeepLink(jsondata):
