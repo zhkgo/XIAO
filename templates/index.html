@@ -1,0 +1,497 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>脑机协同视频检测-主页</title>
+    <script src="./js/vue.js"></script>
+    <script src="./js/axios.min.js"></script>
+    <script type="text/javascript" src="./js/echarts.js"></script>
+    <script type="text/javascript" src="./js/imageList.js"></script>
+    <script type="text/javascript" src="./js/jquery.min.js"></script>
+    <script type="text/javascript" src="./js/jquery.classycountdown.js"></script>
+    <script type="text/javascript" src="./js/jquery.throttle.js"></script>
+    <script type="text/javascript" src="./js/jquery.knob.js"></script>
+
+    <!-- 引入样式 -->
+    <link rel="stylesheet" href="./pkgs/element/lib/theme-chalk/index.css">
+    <link rel="stylesheet" type="text/css" href="css/jquery.classycountdown.css" />
+<!-- 引入组件库 -->
+    <script src="./pkgs/element/lib/index.js"></script>
+    <link  rel="stylesheet" href="./css/animate.min.css"/>
+</head>
+<body>
+    <div id="app">
+    <el-row style="margin-top: 20px;margin-bottom: 30px;">
+        <el-col :span="16"><div ><img src="./images/BCI_title.jpg" width="800px"/></div></el-col>
+        <el-col :span="6"><div style='line-height:height; color: #409eff; text-align: right; font-size: 50px; font-family: font-family: "Helvetica Neue",Helvetica,"PingFang SC","Hiragino Sans GB","Microsoft YaHei","微软雅黑",Arial,sans-serif;'><i class="el-icon-location-information"></i>视频目标跟踪</div></el-col>
+        <audio id="tishiyin" src="./sounds/tishi.wav" preload="auto"></audio>
+    </el-row>
+    <el-row id="stepsrow">
+        <el-steps :active="active" simple>
+            <el-step title="接入脑电" icon="el-icon-s-custom"></el-step>
+            <el-step title="接入计算机视觉" icon="el-icon-cpu"></el-step>
+            <el-step title="接入眼动仪" icon="el-icon-aim"></el-step>
+          </el-steps>
+    </el-row>
+    <el-row id="btns" style="margin-top: 20px;">
+        <el-col :span="1"><div style="width:100%;height:20px;"></div></el-col>
+        <el-col :span="19">
+                <el-button id="BCIbtn" @click="dealBCI()" type="danger" size="small" round><i class="el-icon-s-custom"></i>接入脑电</el-button>
+                <el-button @click="connectToREID()" type="primary" size="small"  round><i class="el-icon-cpu"></i>接入计算机视觉</el-button>
+                <el-button @click="connectToEye()" type="warning" size="small"  round><i class="el-icon-aim"></i>接入眼动仪</el-button>
+                <el-button @click="reviseBaseline()" type="success" size="small" round>修正脑电基线</el-button>
+                <el-button @click="pretrain()" type="info" size="small" round>预训练脑电判别模型</el-button>
+                <el-button @click="toVideo()" type="info" size="small" round>转到视频</el-button>
+        </el-col>
+    </el-row>
+
+    <el-row><div id="bcicontainer" style="margin-top:20 px; height: 600px"></div></el-row>
+    <el-row id="rsvpblock" style="margin-top:20px;margin-left: 50px;">
+        <el-col style="text-align:center" :span="3">
+            <h2>请注意以下目标</h2>
+            <el-card class="box-card">
+                <el-image id="limg" :src="timg" style="width: 200px;height: 400px;"></el-image>
+            </el-card>
+        </el-col>
+        <el-col style="text-align:center" :span="17">
+            <h2 style="margin-bottom: 20px;">刺激呈现区</h2>
+            <div  id="countdown-container" ></div>
+            <el-image id="rimg" :src="showimg" style="width: 200px;height: 400px;"></el-image>
+        </el-col>
+    </el-row>
+    <el-row id="videoing" hidden=true>
+        <el-col id="videosToPlay" :span="4" style="border-radius: 30px;border-style: dashed;margin-right: 10px;">
+                <el-row style='text-align: center; font-weight:bolder;margin-bottom: 10px; font-size: 25px;'>
+                     相关目标踪迹<i class="el-icon-s-platform"></i>
+                </el-row>
+                <el-row :span="4"  v-for="(item,index) in items" v-bind:key="item.id" style="list-style:none; text-align: center; ">
+                    <video class="animated bounce" :id="item.id" :src="item.src" @loadstart="setCurrentTime(item.id,item.currentTime)"  @click="playthis(item.id,index)" 
+                    @mousemove="mouseChange(item.id)" preload="meta" height="150px" style=" border:groove  black; " >
+                            your browser does not support the video 
+                    </video>
+                </el-row>
+        </el-col>
+        <el-col :span="19">
+            <el-row style='margin-bottom: 10px; font-size: 25px;text-align: center; font-weight:bolder;'>
+                实时目标检测区<i class="el-icon-user-solid"></i>
+                    <el-button @click="recommend()" type="primary" round>脑电触发</el-button>
+           </el-row>
+           <el-row>
+            <video id="videoplayed" src="videos/202107011713.mp4"   width="100%" @keyUp="speedChange" controls="controls">
+                your browser does not support the video tag
+            </video>
+        </el-row>
+        </el-col>
+    </el-row>
+</div>
+</body>
+
+<script>
+
+var app=new Vue({
+    el: "#app",
+    data:{
+        bcistatus:0,
+        baseurl:"http://127.0.0.1",
+        active: 0,
+        channels:["FZ", "FC1", "FC2", "C3", "CZ", "C4", "CP1", "CP2", "P7", "P3", "PZ", "P4", "P8", "O1", "OZ", "O2"],
+        imageList:blockimages,
+        timgs:timgs,
+        showimg:blockimages[0][0],
+        timg:timgs[0],
+        present:200,
+        trials:200,
+        sessions:5,
+        cursession:0,
+        curtrial:0,
+        items: [
+        { 
+            id: "r1",
+            src: 'videos/2021070114.mp4',
+            currentTime: 10, 
+        },{ 
+            id: "r2",
+            src: 'videos/202106010931.mp4',
+            currentTime: 5.5,
+        },{ 
+            id: "r3",
+            src: 'videos/202106010933.mp4',
+            currentTime: 2.5,
+        },
+        { 
+            id: "r4",
+            src: 'videos/202106010934.mp4',
+            currentTime: 1.5,
+        },{ 
+            id: "r5",
+            src: 'videos/202107011423.mp4',
+            currentTime: 139,
+        },
+        ],
+        speedId: 3,
+        speedList:[
+           0.25,0.5,0.75,1,2,4,6,8,10,16
+        ],
+    },
+    methods:{
+        toLoading(message){
+            return this.$loading({
+                lock: false,
+                text: message,
+                fullscreen: 'false',
+                spinner: 'el-icon-loading',
+                background: 'rgba(0, 0, 0, 0.5)'
+            })
+        },
+        reviseBaseline(){
+            let loading;
+            loading = this.toLoading("正在修正基线");
+            let aurl=this.baseurl+"/api/reviseBaseline";
+            axios.get(aurl).then(function(response){
+                data=response.data
+                if (data.code==1)
+                    app.$message.error(data.data);
+                else{
+                    app.$message.success("基线修正成功");
+                }
+                loading.close();
+            })
+            .catch(function(error){
+                app.$message.error(String(error));
+                loading.close();
+            });
+        },
+        closeBCI(){
+            let loading;
+            clearInterval(this.dataInterval);
+            loading = this.toLoading("正在关闭上一个脑电模块");
+            let aurl=this.baseurl+"/api/closeBCI";
+            axios.get(aurl).then(function(response){
+                data=response.data
+                if (data.code==1)
+                    app.$message.error(data.data);
+                else{
+                    app.$message.success("脑电连接关闭成功");
+                    document.getElementById("BCIbtn").innerHTML="接入脑电";
+                    app.bcistatus=0;
+                }
+                loading.close();
+            })
+            .catch(function(error){
+                app.$message.error(String(error));
+                loading.close();
+            });
+        },
+        toVideo(){
+            document.getElementById("stepsrow").hidden=true;
+            document.getElementById("btns").hidden=true;
+            document.getElementById("rsvpblock").hidden=true;
+            document.getElementById("videoing").hidden=false;
+        },
+        shiftTrial(){
+            if(this.curtrial==this.trials){
+                clearInterval(this.trialInterval);
+                this.curtrial=0;
+                this.cursession++;
+                if(this.cursession<this.sessions){
+                    this.timg=this.timgs[this.cursession];
+                    this.$notify({title:"请注意",message: "下一个目标已更新" ,type:"success"})
+                    document.getElementById("tishiyin").play();
+                    console.log("修正前"+(Date.now()-this.totStart));
+                    console.log(1000-(Date.now()-this.totStart-this.present*this.trials*this.cursession-(this.cursession-1)*10000))
+                    setTimeout("app.countdown()",1000-(Date.now()-this.totStart-this.present*this.trials*this.cursession-(this.cursession-1)*10000));
+                }
+                return;
+            }
+            this.showimg=this.imageList[this.cursession][this.curtrial];
+            var eps=Date.now()-this.present*this.curtrial-this.firstshow;
+            this.curtrial++;
+            // this.lastshow=Date.now();
+            if(eps>20){
+                setTimeout("app.shiftTrial()", this.present-eps);
+            }else{
+                setTimeout("app.shiftTrial()", this.present);
+            }
+        },
+        doRSVP(){
+            this.timg=this.timgs[this.cursession];
+            this.firstshow=Date.now();
+            this.shiftTrial();
+            // this.clearInterval=setInterval(app.shiftTrial,this.present);
+        },
+        connectToBCI(){
+            let loading;
+            loading = this.toLoading("正在接入脑电信号模块");
+            let aurl=this.baseurl+"/api/bcigo";
+            axios.get(aurl).then(function(response){
+                data=response.data
+                if (data.code==1)
+                    app.$message.error(data.data);
+                else{
+                    app.$message.success("脑电连接成功");
+                    app.channels=data.data.channels;
+                    app.bcistatus=1;
+                    document.getElementById("BCIbtn").innerHTML="断开脑电连接";
+                    app.initEcharts();
+                    app.reviseBaseline();
+                    this.dataInterval=setInterval(()=>{
+                        app.getdata();
+                    },60);
+                }
+                loading.close();
+            })
+            .catch(function(error){
+                app.$message.error(String(error));
+                loading.close();
+            });
+            app.active++;
+        },
+        dealBCI(){
+            if(this.bcistatus==0){
+                this.connectToBCI();
+            }else{
+                this.closeBCI();
+            }
+        },
+        connectToREID(){
+            let loading;
+            loading = this.toLoading("正在接入计算机视觉模块");
+            let aurl= this.baseurl + "/api/reIdgo";
+            axios.get(aurl).then(function(response){
+                data=response.data
+                if (data.code==1)
+                    app.$message.error(data.data);
+                else
+                    app.$message.success("视觉模块连接成功");
+                loading.close();
+            })
+            .catch(function(error){
+                app.$message.error(String(error));
+                loading.close();
+            });
+            app.active++;
+        },
+        connectToEye(){
+            let loading;
+            loading = this.toLoading("正在接入眼动仪模块");
+            let aurl= this.baseurl + "/api/eyeGo";
+            axios.get(aurl).then(function(response){
+                loading.close();
+                data=response.data
+                if (data.code==1)
+                    app.$message.error(data.data);
+                else
+                    app.$message.success("眼动仪连接成功");
+            }).catch(function(error){
+                app.$message.error(String(error));
+                loading.close();
+            });
+            app.active++;
+        },
+        getdata(){
+            let aurl= this.baseurl + "/api/getdata";
+            axios.get(aurl,{
+                params: {
+                    timeend: app.end,
+                }
+            }).then(function(response){
+                data=response.data
+                if (data.code==1){
+                    console.log(data.data);
+                }
+                else{
+                    data=data.data.data;
+                    for (var i = 0; i < data[0].length; i++) {
+                        for(var j = 0 ; j <app.channels.length; j++){
+                            app.signals[j].shift()
+                            app.signals[j].push(data[j][i]+j*6);
+                        }
+                        app.end++;
+                        if ((i+1)%30==0){
+                            series=[]   
+                            for(var j = 0; j < app.channels.length; j++){
+                                series.push({data:app.signals[j]})
+                            }
+                            app.myChart.setOption({
+                                series: series,
+                            });
+                        }
+                    }
+                    series=[]
+                    for(var j = 0; j < app.channels.length; j++){
+                        series.push({name:app.channels[j],type:'line',showSymbol:false,hoverAnimation:false,data:app.signals[j],tooltip: {trigger: 'item',},})
+                    }
+                    app.myChart.setOption({
+                        series: series,
+                    });
+                }
+            }).catch(function(error){
+                app.$message.error(String(error));
+            });
+        },
+        countdown(){
+            document.getElementById("rsvpblock").hidden=false;
+            document.getElementById("rimg").hidden=true;
+            $('#countdown-container').ClassyCountdown({
+                theme: "black-wide", // theme
+                end: '10',//实际是9秒剩下一秒用于修正误差
+				now: '0',
+				labels: true,
+				style: {
+					element: "",
+					textResponsive: .5,
+					seconds: {
+						gauge: {
+							thickness: .02,
+							bgColor: "rgba(0,0,0,0.1)",
+							fgColor: "#f39c12"
+						},
+						textCSS: 'font-family:\'Open Sans\'; font-size:25px; font-weight:300; color:#000000;' //原#34495e
+					}
+				},
+				onEndCallback: function() {
+                    console.log("修正后"+(Date.now()-app.totStart));
+                    if (app.cursession==0)
+                        app.totStart=Date.now()
+                    var obj=$('#countdown-container').children()
+                    for(var i=obj.length-1; i>=0 ; i--) obj[i].remove();
+                    document.getElementById("rimg").hidden=false;
+                    app.doRSVP();
+				}
+            })
+            
+        },
+        pretrain(){
+            document.getElementById("bcicontainer").hidden=true;
+            this.countdown();
+        },
+        setCurrentTime(id,currentTime){
+            obj=document.getElementById(id);
+            obj.currentTime=currentTime;
+        },
+        playthis(id,i){
+            toPlay=document.getElementById(id);
+            played=document.getElementById("videoplayed");
+            tsrc=played.src;
+            tcurrentTime=played.currentTime;
+            played.src=this.items[i].src;
+            played.currentTime=this.items[i].currentTime;
+            played.play();
+            played.focus();
+            played.playbackRate=1;
+            this.speedId=3;
+            this.items[i].src=tsrc;
+            this.items[i].currentTime=tcurrentTime;
+            this.$notify({title:"成功",message:"已跳转到目标所在时间点",type:"success"})
+            //发送请求 表示正在观看的视频已变化
+        },
+        mouseChange(id){
+            obj=document.getElementById(id);
+            obj.style.cursor="pointer";
+        },
+        speedUp(obj){
+            if(this.speedId+1<this.speedList.length){
+                this.speedId+=1
+            }else{
+                return false;
+            }
+            //console.log(this.speedId);
+            obj.playbackRate = this.speedList[this.speedId];
+            return true;
+        },
+        speedDown(obj){
+            if(this.speedId-1>=0)
+                this.speedId-=1
+			else
+				return false;
+            //console.log(this.speedId);
+            obj.playbackRate = this.speedList[this.speedId];
+			return true;
+        },
+        speedChange(e){
+			if(e.keyCode!=83 && e.keyCode!=68){
+				return ;
+			}
+            obj=document.getElementById("videoplayed");
+            res=true
+            if(e.keyCode==83){
+                res=this.speedUp(obj);
+            }else if(e.keyCode==68){
+                res=this.speedDown(obj);
+            }
+            if(res)
+                this.$notify({title:"成功",message:"当前视频播放速度"+obj.playbackRate,type:"success"})
+            else
+                this.$notify({title:"注意",message:"当前视频播放速度为"+obj.playbackRate+"，已达极限。",type:"warning"})
+        },
+        recommend(){
+            this.$notify({title:"相关目标推荐",message: "目标1" ,type:"success"})
+        },
+        initEcharts(){
+            let dom = document.getElementById("bcicontainer");
+            document.getElementById("rsvpblock").hidden=true;
+            document.getElementById("bcicontainer").hidden=false;
+            this.myChart = echarts.init(dom);
+            let option;
+            this.signals = [];
+            for(var i =0 ;i< this.channels.length;i++){
+                this.signals.push([]);
+            }
+            // data=[1,0,-1,1,2,6]
+            for (var i = 0; i < 1500; i++) {
+                for(var j = 0 ; j <this.channels.length; j++){
+                    this.signals[j].push(6*j);
+                }
+            }
+            this.end=0;
+            series=[]
+            for(var i = 0; i < this.channels.length; i++){
+                series.push({name:this.channels[i],type:'line',showSymbol:false,hoverAnimation:false,data:this.signals[i],tooltip: {trigger: 'item',},})
+            }
+            option = {
+                tooltip: {
+                },
+                xAxis: {
+		            show: false,
+                    type: 'category',
+                    min: 0,
+                    max:1500,
+                    splitLine: {
+                        show: false
+                    }
+                },
+                yAxis: {
+                    show: true,
+                    type: 'value',
+                    min: -6,
+                    max: this.channels.length*6+2,
+                    interval:6,
+                    axisLabel:{
+                        formatter: function (value,index) {
+                            var texts = [];
+                            if (index>=1)
+                                texts.push(app.channels[index-1]);
+                            return texts;
+                        }
+                    },
+                    splitLine: {
+                        show: false
+                    },
+                },
+                series: series
+            };
+            if (option && typeof option === 'object') {
+                this.myChart.setOption(option);
+            }
+        },
+    }
+});
+
+app.initEcharts();
+
+
+</script>
+
+</html>
