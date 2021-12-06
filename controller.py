@@ -10,7 +10,7 @@ from api.reid import ReIDTCP
 import configparser
 from bcifilter import BciFilter
 from datatable import VideoDeepLink,Linker
-from flask import Flask,request
+from flask import Flask,request,render_template
 from flask_socketio import SocketIO, emit
 from flask_cors import CORS
 from threading import Lock
@@ -63,7 +63,13 @@ def background_task():
                 if reID is not None:
                     d=reID.getMoreVideo(d)
                 socketio.emit('newdeeplinks',success({"deeplinks":[item.toJson() for item in d]}))
-                
+@app.route('/')
+def page1():
+    return render_template("video.html")
+@app.route('/admin')
+def pageAdmin():
+    return render_template("admin.html", async_mode=socketio.async_mode)
+
 @socketio.on('connect',namespace='/pushDeeplink')
 def recevDeepLink(jsondata):
     print(type(jsondata))
@@ -73,6 +79,10 @@ def recevDeepLink(jsondata):
         model.__setattr__(key,value)
     linker.append(model)
     emit("receive",success({"finish":1,"message":"接受成功"}))
+@socketio.on('connect',namespace='/test')
+def pushtarget():
+    socketio.emit("relatetarget",success({"message":"1号脑电模块已准备就绪"}),namespace="/admin")
+    socketio.emit("relatetarget",success({"message":"计算机视觉模块已准备就绪"}),namespace="/admin")
 
 @socketio.on('startDetection')
 def startDetection():
