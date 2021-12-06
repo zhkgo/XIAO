@@ -1,4 +1,6 @@
 */__pycache__
+/static/videos
+/static/images/rsvp
 /html/videos
 /html/images/rsvp
 */*.pyc
