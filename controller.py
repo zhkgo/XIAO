@@ -29,7 +29,7 @@ app = Flask(__name__,static_url_path="")
 app.config['JSON_AS_ASCII'] = False
 app.config['SECRET_KEY'] = 'secret!'
 CORS(app, supports_credentials=True)
-socketio = SocketIO(app)
+socketio = SocketIO(app,cors_allowed_origins='*')
 
 
 def background_task():
@@ -81,6 +81,7 @@ def recevDeepLink(jsondata):
     emit("receive",success({"finish":1,"message":"接受成功"}))
 @socketio.on('connect',namespace='/test')
 def pushtarget():
+    print("here in test connect")
     socketio.emit("relatetarget",success({"message":"1号脑电模块已准备就绪"}),namespace="/admin")
     socketio.emit("relatetarget",success({"message":"计算机视觉模块已准备就绪"}),namespace="/admin")
 
@@ -119,7 +120,7 @@ def getdata():
     # print("TCP END WHEN GET DATA",experiment.tcp.end)
     try:
         timeend=int(request.args.get('timeend'))
-        arr,rend=experiment.getData(timeend,zerobegin=True)
+        arr,rend=experiment.getData(timeend)
         arr=(arr-experiment.means)/experiment.sigmas
         # print(arr.tolist())
     except Exception as e:
