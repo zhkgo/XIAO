@@ -30,8 +30,24 @@ CORS(app, supports_credentials=True)
 socketio = SocketIO(app,cors_allowed_origins='*')
 
 
+
+@app.route('/')
+def page1():
+    return render_template("video.html")
+@app.route('/admin')
+def pageAdmin():
+    return render_template("admin.html", async_mode=socketio.async_mode)
+
+#link 收发区
+@socketio.on('pushlink',namespace='/pushDeeplink')
+def recevDeepLink(jsondata):
+    model=VideoDeepLink()
+    for (key,value) in jsondata.items():
+        model.__setattr__(key,value)
+    linker.append(model)
+
 def background_task():
-    global linker,experiment,reID
+    global linker,experiment
     experiment.start()
     while experiment.fitSessions>0:
         socketio.sleep(0.1)
@@ -40,50 +56,23 @@ def background_task():
             continue
         if type(res) is str:
             print(res)
-            socketio.emit('my_response',success({"finish":1,"message":res}))
+            socketio.emit('message', success(res), namespace="/pushDeeplink")
             break
-        socketio.emit('my_response',success({"finish":0,"sessions":res[0],"trials":res[1]}))
     if experiment.fitSessions>0:
         res=experiment.trainThreadStep2()
-        socketio.emit('my_response',success({"finish":1,"message":res}))
     while True:
         res=experiment.predictThread()
         if res=="wait":
             continue
         if type(res) is str:
             print(res)
-            socketio.emit('my_response',success({"finish":1,"message":res}))
+            socketio.emit('message',success(res),namespace="/pushDeeplink")
             break
         res,ctime=res[0],res[2]
         if res==1:
             d=linker.match(ctime)
-            if type(d) is list:
-                if reID is not None:
-                    d=reID.getMoreVideo(d)
-                socketio.emit('newdeeplinks',success({"deeplinks":[item.toJson() for item in d]}))
-@app.route('/')
-def page1():
-    return render_template("video.html")
-@app.route('/admin')
-def pageAdmin():
-    return render_template("admin.html", async_mode=socketio.async_mode)
-
+            socketio.emit('newlinks',success(d[0].toJson()),namespace="/pushDeeplink")
 @socketio.on('connect',namespace='/pushDeeplink')
-def recevDeepLink(jsondata):
-    print(type(jsondata))
-    print(jsondata)
-    model=VideoDeepLink
-    for (key,value) in jsondata.items():
-        model.__setattr__(key,value)
-    linker.append(model)
-    emit("receive",success({"finish":1,"message":"接受成功"}))
-@socketio.on('connect',namespace='/test')
-def pushtarget():
-    print("here in test connect")
-    socketio.emit("relatetarget",success({"message":"1号脑电模块已准备就绪"}),namespace="/admin")
-    socketio.emit("relatetarget",success({"message":"计算机视觉模块已准备就绪"}),namespace="/admin")
-
-@socketio.on('startDetection')
 def startDetection():
     global _thread
     try:
@@ -91,26 +80,40 @@ def startDetection():
             _thread = socketio.start_background_task(target=background_task)
     except Exception as e:
         print(e)
-        emit("my_response",fail(str(e)))
-    emit("my_response",success())
+        emit("message",fail(str(e)))
+    emit("message",success("开始检测"))
+
+@socketio.on('connect',namespace='/test')
+def pushtarget():
+    print("here in test connect")
+    socketio.emit("relatetarget",success({"message":"1号脑电模块已准备就绪"}),namespace="/admin")
+    socketio.emit("relatetarget",success({"message":"计算机视觉模块已准备就绪"}),namespace="/admin")
+
+
+
 def eegdataBackTask(c=1):
     global _eegthread,experiment
     socketio.emit('message', success("数据接收通道开启成功"), namespace="/eegdata")
     timeend = -1
+    cnt=0
     while _eegthread is not None:
         arr, rend = experiment.getData(timeend, show=True)
         arr=arr[:c]
         if rend != timeend:
             timeend = rend
             socketio.emit('eegdatacome', success(arr.tolist()),namespace="/eegdata")
+            cnt=0
+        else:
+            cnt+=1
+            if cnt==20:
+                timeend=-1
+                cnt=0
         # print("running")
         socketio.sleep(0.05)
-
 @socketio.on('geteegdata',namespace='/eegdata')
 def eegsocket(d):
     global _eegthread
     _eegthread=socketio.start_background_task(eegdataBackTask,d['c'])
-
 @socketio.on("stopreceive",namespace='/eegdata')
 def closeEEGsocket():
     global _eegthread
@@ -124,13 +127,14 @@ def bcigo():
         print(e)
         return fail(str(e))
     return success({"channels":experiment.channels})
+
 @app.route("/api/bcidown")
 def closeBCI():
     global experiment
-    experiment.finish(savefile=False)
+    experiment.finish(savefile=True)
     return success()
 
-@app.route("/api/reIdgo") 
+@app.route("/api/reIdgo")
 def reIDgo():
     try:
         reIDReady()
@@ -138,33 +142,6 @@ def reIDgo():
         print(e)
         return fail(str(e))
     return success()
-
-@app.route('/api/getdata')
-def getdata():
-    global experiment
-    # print("TCP END WHEN GET DATA",experiment.tcp.end)
-    try:
-        timeend=int(request.args.get('timeend'))
-        arr,rend=experiment.getData(timeend,show=True)
-        # print(arr.tolist())
-    except Exception as e:
-        traceback.print_exc()
-        return fail(str(e))
-    # print("返回数据维度：", np.array(arr).shape)
-    # print(np.array(arr).shape)
-    # ['Fz','Cz','Pz','P3','P4','P7','P8','Oz','O1','O2','T7','T8']
-    return success({"data":arr.tolist(),'timeend':rend})
-    
-@app.route("/api/reviseBaseline")
-def reviseBaseline():
-    global experiment
-    try:
-        experiment.reviseBaseline()
-    except Exception as e:
-        print(e)
-        return fail(str(e))
-    return success("修正基线成功")
-
 
 
 '''准备脑电接口'''

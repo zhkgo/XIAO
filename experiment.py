@@ -21,6 +21,7 @@ class Experiment:
              'X2', 'F7', 'F8', 'X1', 'A2', 'T6', 'T4', 'TRG'],
         ]
         self.parses = [neuracleParse, neuroscanParse, dsiParse]
+        self.sampleRates = [250,1000,300]
         self.tcps = []
         self.classfier = None
         self.scaler = None
@@ -47,6 +48,8 @@ class Experiment:
         self.fitEvents = []
         self.trainData = []
         self.labels = []
+
+        self.sampleRate=1000
         # self.end=0
 
     def getParse(self):
@@ -105,6 +108,7 @@ class Experiment:
         self.device = device
         assert device < 3, "设备编号应当小于3"
         self.device_channels = self.CHANNELS[self.device]
+        self.sampleRate=self.sampleRates[self.device]
 
     # 暂未重写 先留着 还没啥用处
     def restart_tcp(self):
@@ -135,6 +139,7 @@ class Experiment:
     # 数据格式为 channels*times
     # 如果tcpid=-1 则返回全部按通道叠加后的数据，否则返回对应通道的数据
     def getData(self, startpos: int, windows=1000, tcpid=0, median=False, show=False):
+        # print(startpos)
         assert len(self.tcps) > 0, "请先设置TCP"
         if tcpid != -1:
             data, rend = self.tcps[tcpid].get_batch(self.startTimes[tcpid] + startpos if startpos > -1 else -1,
@@ -224,6 +229,8 @@ class Experiment:
         self.classfier.aug_train(np.array(self.trainData), self.trainLabel)
         self.i = 0
         return "增量训练完毕,即将开始测试"
+    def toSamplePos(self,v):
+        return int(v*self.sampleRate/1000)
 
     def predictThread(self):
         eventslen = len(self.events)
@@ -233,12 +240,12 @@ class Experiment:
         # print("当前经过时间",eeendtime-self.startTTT)
         # print("数据段游标移动",self.tcp.end-self.startTime)
         while self.i < eventslen:
-            if self.events[self.i] + self.tmax < self.getMinEnd():
-                self.res[self.i] = self.predictOnce(self.events[self.i] + self.tmin, self.tmax - self.tmin)
+            if self.toSamplePos(self.events[self.i] + self.tmax) < self.getMinEnd():
+                self.res[self.i] = self.predictOnce(self.toSamplePos(self.events[self.i] + self.tmin), self.toSamplePos(self.tmax - self.tmin))
                 # np.roll(self.res,1,axis=0)
+                ctime = self.events[self.i]
                 self.i += 1
-                return int(self.res[self.i - 1]), int(
-                    self.labels[self.i - 1 + fitslen]) if lenlabels > self.i - 1 + fitslen else "未给出"
+                return int(self.res[self.i - 1]), int(self.labels[self.i - 1 + fitslen]) if lenlabels > self.i - 1 + fitslen else "未给出",self.startTTT+ctime
             else:
                 return "wait"
         self.finish()  # 结束实验 保存数据
@@ -258,5 +265,6 @@ class Experiment:
         assert self.classfier != None, "分类器不能为空"
         data, _ = self.getData(startpos, windows=windows, tcpid=-1)
         data = np.expand_dims(data, axis=0)
+        print(data.shape)
         label = self.classfier.predict(data)[0]
         return label

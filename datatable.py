@@ -30,10 +30,12 @@ class Linker:
     def __init__(self):
         self.cacheList=deque(maxlen=100) #若250ms加一次数据则250*100 缓存最多25秒数据
         self.deepLinks=[]
-        self.batchsize=64 #采集到足够多的样本再推荐
+        self.batchsize=1 #采集到足够多的样本再推荐
     #ctime 表示脑电片段的起点时间
-    def match(self,ctime,interval=0.25):
+    def match(self,ctime,interval=0.05):
         clink=self.cacheList.popleft()
+        print("clink=",clink)
+        print("ctime=", ctime)
         while clink.sysTime<ctime:
             if ctime-clink.sysTime<interval:
                 self.deepLinks.append(clink)
@@ -42,7 +44,7 @@ class Linker:
                     self.deepLinks.clear()
                     return ff
                 return 1
-            else:
+            else:#留错
                 clink=self.cacheList.popleft()
         self.cacheList.appendleft(clink)
         print("未匹配到合适视频帧")
