@@ -1,15 +1,10 @@
-# -*- coding: utf-8 -*-
-"""
-Created on Sat Nov 21 20:41:30 2020
-
-@author: zhkgo
-"""
 import threading
 import numpy as np
 import time
 from api.neuracleParse import TCPParser as neuracleParse
 from api.neuroscanParse import TCPParser as neuroscanParse
 from api.dsiParse import DSIDevice as dsiParse
+import copy
 
 
 class Experiment:
@@ -30,25 +25,23 @@ class Experiment:
         self.classfier = None
         self.scaler = None
         self.filter = None
+        self.filters = []
         self.channels = None
         self.res = np.zeros((7200, 1))
         self.done = False
         self.tcpThread = []
         self.windows = 1000
 
-        # 均值标准差用于修正波形显示
-        self.means = None
-        self.sigmas = None
 
         self.fitSessions = 0
-        self.startTimes = [0, 0, 0, 0, 0, 0]  # 实验开始时间 对于不同TCP连接 开始的点可能不同 单位ms
+        self.startTimes = []  # 实验开始时间 对于不同TCP连接 开始的点可能不同 单位ms
         self.sessions = 0  # session数量
         self.trials = 0  # 每个session的trial数量
         self.duration = 0  # 一个trail持续时间 单位ms
         self.interval = 0  # session之间的间隔
         self.tmin = 0  # 截取时间起点（相比于trail开始的时间点 单位ms）
         self.tmax = 0  # 截取时间终点（相比于trail开始的时间点 单位ms）
-        self.device = 0  # device= 0 博瑞康 device=1 neuroscan
+        self.device = 0  # device= 0 博瑞康 device=1 neuroscan  device=2 dsi24
         self.device_channels = []
         self.events = []
         self.fitEvents = []
@@ -59,9 +52,9 @@ class Experiment:
     def getParse(self):
         return self.parses[self.device]
 
-    def finish(self):
+    def finish(self,savefile=True):
         self.done = True
-        self.stop_tcp()
+        self.stop_tcp(savefile=savefile)
 
     def start_tcp(self):
         assert len(self.tcps) > 0, "请先初始化设置"
@@ -77,10 +70,11 @@ class Experiment:
             print(tcp.name, end=':')
             print("TCP线程数据已保存")
 
-    def stop_tcp(self):
+    def stop_tcp(self,savefile=True):
         for tcp, thred, startTime in zip(self.tcps, self.tcpThread, self.startTimes):
             tcp.close()
-            tcp.saveData(startTime)
+            if savefile==True:
+                tcp.saveData(startTime)
             thred.join()
             print(tcp.name, end=':')
             print("TCP线程已成功关闭")
@@ -94,7 +88,6 @@ class Experiment:
         self.tmin = tmin
         self.tmax = tmax
         self.fitSessions = fitSessions
-        self.skipinterval = skipinterval
         cur = 0
 
         for i in range(self.fitSessions):
@@ -103,13 +96,12 @@ class Experiment:
                 cur += self.duration
             cur += self.interval
 
-
         for i in range(self.fitSessions, self.sessions):
             for j in range(self.trials):
                 self.events.append(cur)
                 cur += self.duration
-            if self.skipinterval==0:
-                cur+=self.interval
+            if skipinterval==0:
+                cur += self.interval
         self.device = device
         assert device < 3, "设备编号应当小于3"
         self.device_channels = self.CHANNELS[self.device]
@@ -123,6 +115,8 @@ class Experiment:
 
     def set_dataIn(self, tcp):
         self.tcps.append(tcp)
+        self.startTimes.append(0)
+        self.filters.append(copy.deepcopy(self.filter))
 
     def set_filter(self, sfilter):
         self.filter = sfilter
@@ -140,22 +134,28 @@ class Experiment:
     # 返回滤波后数据和数据截止时间点
     # 数据格式为 channels*times
     # 如果tcpid=-1 则返回全部按通道叠加后的数据，否则返回对应通道的数据
-    def getData(self, startpos: int, windows=1000, tcpid=0, median=False, normalize=False):
+    def getData(self, startpos: int, windows=1000, tcpid=0, median=False, show=False):
         assert len(self.tcps) > 0, "请先设置TCP"
         if tcpid != -1:
             data, rend = self.tcps[tcpid].get_batch(self.startTimes[tcpid] + startpos if startpos > -1 else -1,
                                                     maxlength=windows)
-            if self.filter:
-                data = self.filter.deal(data)
+            if self.filters[tcpid]:
+                if not show:
+                    data = self.filters[tcpid].deal(data)
+                else:
+                    data = self.filters[tcpid].dealforshow(data)
             rend -= self.startTimes[tcpid]
             return data, int(rend)
         totdata = []
         totrend = 100000000
         minl = 100000
-        for tcp, startTime in zip(self.tcps, self.startTimes):
+        for tcp, startTime, filter in zip(self.tcps, self.startTimes, self.filters):
             data, rend = tcp.get_batch(startTime + startpos if startpos > -1 else -1, maxlength=windows)
-            if self.filter:
-                data = self.filter.deal(data)
+            if filter:
+                if not show:
+                    data = filter.deal(data)
+                else:
+                    data = filter.dealforshow(data)
             totdata.append(data)
             print("Experimrnt get rend:", rend)
             rend -= startTime
@@ -164,17 +164,9 @@ class Experiment:
         # print(minl)
         for i in range(len(totdata)):
             totdata[i] = totdata[i][:, :minl]
-            # print("totdata:",end='')
-            # print(totdata[i].shape)
             if median:
                 totdata[i] = np.median(totdata[i], axis=0, keepdims=True)
         totdata = np.concatenate(totdata, axis=0)
-        if normalize:
-            if self.means is None:
-                self.means = np.mean(totdata, axis=1, keepdims=True)
-            if self.sigmas is None:
-                self.sigmas = np.std(totdata, axis=1, keepdims=True)
-            totdata = (totdata - self.means) / self.sigmas
         print("Experimrnt return rend:", totrend)
         return totdata, int(totrend)
 
@@ -190,11 +182,11 @@ class Experiment:
         if self.fitSessions > 0:
             assert hasattr(clf, 'aug_train'), "预训练参数不为0时必须包含增强训练(aug_train)函数"
         self.classfier = clf
-        # try:
-        #     self.labels = np.load("models/labels.npy")
-        #     print("标签长度为：", len(self.labels))
-        # except:
-        #     assert False, "模型加载完毕，未检测到标签"
+        try:
+            self.labels = np.load("models/labels.npy")
+            print("标签长度为：", len(self.labels))
+        except:
+            print("模型加载完毕，未检测到标签")
 
     def startRecord(self):
         assert len(self.tcps) > 0, "接入数据不能为空"

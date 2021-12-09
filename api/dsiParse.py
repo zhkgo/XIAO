@@ -13,7 +13,6 @@ class DSIDevice:
     counter = 0
     batch_size = 50
     channels = []
-    # socket_ = object
     frequency = {}
     d = 0
     done = False
@@ -27,6 +26,7 @@ class DSIDevice:
         self.sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         self.sock.connect((self.host, self.port))
         self.end = 0
+        self.save_path="./data/"
 
 
     # 刷新
@@ -111,7 +111,9 @@ class DSIDevice:
         #startT=time.time()
         while not self.done:
         # for i in range(20):
+        #     print(self.sock)
             data = self.sock.recv(2048000)
+            # print("ss")
             self.data_log += data
             # print(data)
             index = 0
@@ -166,10 +168,10 @@ class DSIDevice:
 
         # return EEG_batch_data
 
-    def close(self,savefile=True):
+    def close(self):
         self.done = True
         time.sleep(0.2)
-        self.socket_.close()
+        self.sock.close()
 
 
 # data = read_data('dsi.pkl')

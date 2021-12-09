@@ -4,3 +4,4 @@
 /html/videos
 /html/images/rsvp
 */*.pyc
+/data/*

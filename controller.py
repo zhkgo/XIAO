@@ -5,7 +5,6 @@ Created on Mon Jun 28 15:08:02 2021
 """
 
 from experiment import Experiment
-from api.neuracleParse import TCPParser as BCI
 from api.reid import ReIDTCP
 import configparser
 from bcifilter import BciFilter
@@ -17,10 +16,9 @@ from threading import Lock
 from myresponse import success,fail
 import importlib
 import traceback
-
 thread_lock = Lock()
 _thread=None
-
+_eegthread=None
 conf = configparser.ConfigParser()
 experiment=None
 reID=None
@@ -95,8 +93,30 @@ def startDetection():
         print(e)
         emit("my_response",fail(str(e)))
     emit("my_response",success())
+def eegdataBackTask(c=1):
+    global _eegthread,experiment
+    socketio.emit('message', success("数据接收通道开启成功"), namespace="/eegdata")
+    timeend = -1
+    while _eegthread is not None:
+        arr, rend = experiment.getData(timeend, show=True)
+        arr=arr[:c]
+        if rend != timeend:
+            timeend = rend
+            socketio.emit('eegdatacome', success(arr.tolist()),namespace="/eegdata")
+        # print("running")
+        socketio.sleep(0.05)
 
-@app.route("/api/bcigo") 
+@socketio.on('geteegdata',namespace='/eegdata')
+def eegsocket(d):
+    global _eegthread
+    _eegthread=socketio.start_background_task(eegdataBackTask,d['c'])
+
+@socketio.on("stopreceive",namespace='/eegdata')
+def closeEEGsocket():
+    global _eegthread
+    _eegthread=None
+
+@app.route("/api/bcigo")
 def bcigo():
     try:
         bciReady()
@@ -104,6 +124,11 @@ def bcigo():
         print(e)
         return fail(str(e))
     return success({"channels":experiment.channels})
+@app.route("/api/bcidown")
+def closeBCI():
+    global experiment
+    experiment.finish(savefile=False)
+    return success()
 
 @app.route("/api/reIdgo") 
 def reIDgo():
@@ -120,8 +145,7 @@ def getdata():
     # print("TCP END WHEN GET DATA",experiment.tcp.end)
     try:
         timeend=int(request.args.get('timeend'))
-        arr,rend=experiment.getData(timeend)
-        arr=(arr-experiment.means)/experiment.sigmas
+        arr,rend=experiment.getData(timeend,show=True)
         # print(arr.tolist())
     except Exception as e:
         traceback.print_exc()
@@ -141,11 +165,7 @@ def reviseBaseline():
         return fail(str(e))
     return success("修正基线成功")
 
-@app.route("/api/closeBCI")
-def closeBCI():
-    global experiment
-    experiment.finish(savefile=False)
-    return success()
+
 
 '''准备脑电接口'''
 def bciReady(filename='config.ini'):
@@ -189,7 +209,8 @@ def bciReady(filename='config.ini'):
     host=cur['host']
     port=int(cur['port'])
     tcpname=cur['name']
-    tcp=BCI(host=host,port=port,name=tcpname)
+    TCPParse=experiment.getParse()
+    tcp=TCPParse(host=host,port=port,name=tcpname)
     print("tcp: ",tcp)
     ch_nums=experiment.device_channels
     tcp.create_batch(ch_nums)

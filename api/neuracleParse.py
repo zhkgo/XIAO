@@ -24,7 +24,7 @@ class TCPParser:  # The script contains one main class which handles Streamer da
         self.sock.connect((self.host, self.port))
         self.channel_names=['Fp1','Fp2','F3','F4','F7','F8','FC1','FC2','FC5','FC6','Cz','C3','C4','T7','T8','CP1','CP2','CP5','CP6','Pz','P3','P4','P7','P8','POz','PO3','PO4','PO5','PO6','Oz','O1','O2','ref'],#ref 参考电极
         self.end=0
-        self.savepath='./data/'
+        self.save_path='./data/'
     def reinit(self):
         self.done = False
         # self.data_log = b''
